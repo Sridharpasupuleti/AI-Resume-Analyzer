@@ -1,0 +1,18 @@
+backend/target/
+
+# IDE metadata
+.idea/
+.vscode/
+*.iml
+backend/.classpath
+backend/.project
+backend/.settings/
+
+# Local secrets and environment configuration
+.env
+.env.*
+!.env.example
+
+# Logs and generated modernization tooling state
+*.log
+.github/modernize/java-upgrade/
