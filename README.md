@@ -13,6 +13,9 @@ contains the backend foundation and authentication API.
 - Stateless JWT authentication
 - Authenticated current-user endpoint
 - Request validation and consistent API error responses
+- Authenticated PDF/DOCX resume upload, text extraction, listing, retrieval, download, and deletion
+- Authenticated job description creation, listing, retrieval, updating, and deletion
+- Authenticated, persisted resume-to-job analysis using OpenAI or a local mock analyzer
 
 ## Requirements
 
@@ -34,6 +37,8 @@ $jwtBytes = New-Object byte[] 32
 $rng.GetBytes($jwtBytes)
 $env:JWT_SECRET = [Convert]::ToBase64String($jwtBytes)
 $rng.Dispose()
+$env:ANALYSIS_PROVIDER = "openai"
+$env:LLM_API_KEY = "your-openai-api-key"
 
 cd backend
 mvn spring-boot:run
@@ -91,6 +96,85 @@ Passwords must be at least 8 characters and no more than 72 UTF-8 bytes.
 Tokens expire after one hour by default; configure `JWT_EXPIRATION_MS` to
 change the lifetime.
 
+## Resume API
+
+All resume endpoints require a bearer token. Upload a PDF or DOCX file as a
+multipart field named `file`:
+
+- `POST /api/v1/resumes` — upload and extract resume text (maximum 10 MB)
+- `GET /api/v1/resumes` — list your resume metadata
+- `GET /api/v1/resumes/{id}` — retrieve your resume and extracted text
+- `GET /api/v1/resumes/{id}/file` — download the original file
+- `DELETE /api/v1/resumes/{id}` — delete your resume
+
+Files are stored locally under `backend/data/resumes` by default. Set
+`RESUME_STORAGE_DIR` to change the storage directory and
+`RESUME_MAX_FILE_SIZE` to change the per-file limit (for example, `15MB`).
+If increasing the file limit, increase `RESUME_MAX_REQUEST_SIZE` as needed
+(default `11MB`) to allow for multipart request overhead.
+Uploaded files are not committed to the repository.
+
+## Jobs API
+
+All job endpoints require a bearer token. Create a job with a manually entered
+description:
+
+```http
+POST /api/v1/jobs
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+{
+  "companyName": "Example Inc.",
+  "jobTitle": "Java Engineer",
+  "jobDescription": "Build and maintain Spring Boot services.",
+  "jobUrl": "https://example.com/careers/java-engineer",
+  "location": "Remote"
+}
+```
+
+- `POST /api/v1/jobs` — create a job
+- `GET /api/v1/jobs` — list your jobs
+- `GET /api/v1/jobs/{id}` — retrieve one of your jobs
+- `PUT /api/v1/jobs/{id}` — replace a job's editable fields
+- `DELETE /api/v1/jobs/{id}` — delete a job
+
+`jobTitle` and `jobDescription` are required (up to 100,000 characters).
+Company, URL, and location are optional. Job descriptions are manually
+entered; scraping is not supported.
+Requests for another user's job return not found.
+
+## Resume analysis API
+
+Create an analysis by selecting one of your resumes and one of your jobs:
+
+```http
+POST /api/v1/analyses
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+{
+  "resumeId": 10,
+  "jobId": 25
+}
+```
+
+- `POST /api/v1/analyses` — analyze and save a resume/job match
+- `GET /api/v1/analyses` — list your saved analyses
+- `GET /api/v1/analyses/{id}` — retrieve one of your saved analyses
+
+Analysis calls OpenAI's Chat Completions API using `gpt-4o-mini` by default.
+Set `LLM_API_KEY` in your environment before starting the backend; optionally
+set `LLM_MODEL` to select another compatible model. The selected resume text
+and job description are sent to OpenAI for analysis. Do not upload documents
+unless you are comfortable processing them through your configured OpenAI
+account. Both source records must belong to the authenticated user.
+
+For local development without a provider key, set `ANALYSIS_PROVIDER=mock`.
+That uses a deterministic keyword-based comparison and is not an AI
+assessment. The mock provider is not used as a silent fallback when OpenAI is
+selected but unavailable or unconfigured.
+
 ## Project documentation
 
 - [Architecture and implementation phases](./MD%20Files/ARCHITECTURE.md)
@@ -100,4 +184,5 @@ change the lifetime.
 ## Project status
 
 The project is under active development. Resume management, job management,
-resume analysis, the React frontend, and deployment are planned future phases.
+and configurable OpenAI/mock resume analysis are implemented in the backend;
+the React frontend and deployment are planned future phases.

@@ -1259,6 +1259,12 @@ Metadata persists.
 Only the owner can access it.
 ```
 
+Implementation progress: authenticated PDF/DOCX upload, content checks,
+10 MB configurable limit, text extraction and normalization, local file
+storage behind an interface, owner-scoped listing/retrieval/download/deletion,
+and Flyway persistence are implemented. Automated tests cover extraction,
+validation, upload ownership, and endpoint authentication.
+
 ------------------------------------------------------------------------
 
 ## Phase 4 --- Job Management
@@ -1274,6 +1280,12 @@ Implement:
 -   ownership checks
 
 Do not implement scraping.
+
+Implementation progress: authenticated job creation, listing, retrieval,
+update, and deletion are implemented for manually entered job descriptions.
+Job access is scoped to the authenticated owner, and Flyway creates the jobs
+table with a user foreign key. Request validation and controller/service tests
+cover the API and CRUD behavior.
 
 ------------------------------------------------------------------------
 
@@ -1296,6 +1308,15 @@ Build:
 
 This phase proves the architecture before adding external API costs.
 
+Implementation progress: authenticated analysis creation verifies ownership
+of both source records, calls an `LlmAnalysisService` backed by a deterministic
+keyword-based mock, validates and persists the structured result, and provides
+owner-scoped analysis history and retrieval. The score and recommendations
+are explicitly basic keyword heuristics, not an AI assessment.
+
+The mock provider is selected with `ANALYSIS_PROVIDER=mock`; it is not used
+as a fallback when a real provider fails.
+
 ------------------------------------------------------------------------
 
 ## Phase 6 --- Real LLM Integration
@@ -1311,6 +1332,14 @@ Implement:
 -   environment-based secrets
 
 Keep provider-specific code isolated.
+
+Implementation progress: OpenAI Chat Completions integration is implemented
+with strict structured JSON output, environment-based API key/model settings,
+request timeouts, output validation, and explicit provider error responses.
+OpenAI is selected by default; set `ANALYSIS_PROVIDER=mock` for offline use.
+Analysis sends the selected resume text and job description to OpenAI.
+Automated tests use a mocked HTTP server; a live provider call still requires
+a locally configured OpenAI API key.
 
 ------------------------------------------------------------------------
 

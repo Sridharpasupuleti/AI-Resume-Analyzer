@@ -7,6 +7,9 @@ import java.util.Map;
 import com.resumeanalyzer.auth.service.EmailAlreadyRegisteredException;
 import com.resumeanalyzer.auth.service.InvalidCredentialsException;
 import com.resumeanalyzer.auth.service.PasswordTooLongException;
+import com.resumeanalyzer.analysis.service.AnalysisException;
+import com.resumeanalyzer.job.service.JobNotFoundException;
+import com.resumeanalyzer.resume.service.ResumeException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -19,6 +22,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -79,6 +83,61 @@ public class GlobalExceptionHandler {
             PasswordTooLongException exception,
             HttpServletRequest request) {
         return error(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(JobNotFoundException.class)
+    public ResponseEntity<ApiError> handleJobNotFound(
+            JobNotFoundException exception,
+            HttpServletRequest request) {
+        return error(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(AnalysisException.class)
+    public ResponseEntity<ApiError> handleAnalysisException(
+            AnalysisException exception,
+            HttpServletRequest request) {
+        HttpStatus status = switch (exception.getReason()) {
+            case RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case REQUEST_TOO_LARGE -> HttpStatus.PAYLOAD_TOO_LARGE;
+            case PROVIDER_NOT_CONFIGURED -> HttpStatus.SERVICE_UNAVAILABLE;
+            case PROVIDER_FAILURE, INVALID_RESULT -> HttpStatus.BAD_GATEWAY;
+        };
+        if (status.is5xxServerError()) {
+            log.error(
+                    "Analysis operation failed for {} {} ({})",
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    exception.getReason());
+        }
+        return error(status, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(ResumeException.class)
+    public ResponseEntity<ApiError> handleResumeException(
+            ResumeException exception,
+            HttpServletRequest request) {
+        HttpStatus status = switch (exception.getReason()) {
+            case INVALID_FILE -> HttpStatus.BAD_REQUEST;
+            case FILE_TOO_LARGE -> HttpStatus.PAYLOAD_TOO_LARGE;
+            case NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case EXTRACTION_FAILED -> HttpStatus.UNPROCESSABLE_ENTITY;
+            case STORAGE_FAILURE -> HttpStatus.INTERNAL_SERVER_ERROR;
+        };
+        if (status.is5xxServerError()) {
+            log.error("Resume operation failed for {} {}", request.getMethod(), request.getRequestURI(), exception);
+        }
+        return error(status, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> handleMaxUploadSizeExceeded(
+            MaxUploadSizeExceededException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "The resume file exceeds the maximum allowed size",
+                request,
+                Map.of());
     }
 
     @ExceptionHandler(Exception.class)
